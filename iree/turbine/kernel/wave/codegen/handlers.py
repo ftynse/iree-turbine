@@ -994,12 +994,23 @@ def handle_extract_slice(emitter: WaveEmitter, node: fx.Node):
 
     extract_vector = cast_vector(emitter, register)
     result_type = VectorType.get(sizes, extract_vector.type.element_type)
+
+    def gen_index(expr: IndexExpr):
+        substituted = subs_idxc(expr)
+        try:
+            integer = int(substituted)
+        except TypeError as e:
+            raise ValidationError(
+                "Could not simplify vector slice to have static shape"
+            ) from e
+        return integer
+
     element = vector_d.extract_strided_slice(
         result_type,
         extract_vector,
-        offsets,
-        sizes,
-        strides,
+        list(map(gen_index, offsets)),
+        list(map(gen_index, sizes)),
+        list(map(gen_index, strides)),
     )
 
     emitter.bind_node_proxy(node, IRProxyValue(element))

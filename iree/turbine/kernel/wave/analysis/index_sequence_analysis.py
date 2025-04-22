@@ -113,7 +113,9 @@ def verify_nodes(trace: CapturedTrace, constraints: list[Constraint]):
             continue
         if isinstance(custom.type, DataType):
             continue
-        assert custom.index, f"Index not set for node {custom.fx_node}: {custom}"
+        assert (
+            custom.index is not None
+        ), f"Index not set for node {custom.fx_node}: {custom}"
 
         if not custom.vector_shapes:
             # If vector_shapes is not set, see if it can be derived from the hardware constraints.
@@ -468,7 +470,9 @@ def propagate_indices(
     """
     reduction = None
     while sources:
+        # breakpoint()
         source, source_index, source_vector_shapes = sources.pop(0)
+        print(f"# propagating: {source}, {source.index}, {source_index}")
         if source in visited:
             continue
         if not isinstance(source, (NestedRegionOp, MMA)):

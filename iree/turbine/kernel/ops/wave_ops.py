@@ -1822,6 +1822,10 @@ class ExtractSlice(CustomOp):
         return get_custom(self.register_).type
 
     @property
+    def indexing_dims(self):
+        return get_custom(self.register_).indexing_dims
+
+    @property
     def rank(self) -> int:
         offset_rank = len(self.offset)
         size_rank = len(self.size)
