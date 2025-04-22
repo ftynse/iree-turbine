@@ -771,6 +771,65 @@ def test_read_write_conditional():
 
 
 @run_test
+def test_thread_idx_condition():
+    M = tkl.sym.M
+    N = tkl.sym.N
+    BLOCK_M = tkl.sym.BLOCK_M
+    BLOCK_N = tkl.sym.BLOCK_N
+    ELEMS_PER_THREAD = tkl.sym.ELEMS_PER_THREAD
+    ADDRESS_SPACE = tkl.sym.ADDRESS_SPACE
+
+    constraints: list[tkw.Constraint] = [
+        tkw.HardwareConstraint(
+            threads_per_wave=64,
+            waves_per_block=(1, 1, 1),
+            vector_shapes={M: BLOCK_M, N: 1},
+        )
+    ]
+    constraints += [tkw.WorkgroupConstraint(M, BLOCK_M, 0)]
+    constraints += [tkw.WorkgroupConstraint(N, BLOCK_N, 1)]
+    constraints += [tkw.WaveConstraint(M, BLOCK_M)]
+    constraints += [tkw.WaveConstraint(N, BLOCK_N)]
+
+    @tkw.wave(constraints)
+    def test(a: tkl.Memory[M, N, ADDRESS_SPACE, tkl.f32]):
+        thread_idx = tkw.thread_idx(M, 0)
+        casted = tkw.cast(thread_idx, tkl.f32)
+        cond = tkw.apply_expr(thread_idx, lambda a: a < 1)
+
+        @tkw.conditional(cond)
+        def then():
+            tkw.write(casted, a, elements_per_thread=1)
+
+    shape = (256, 128)
+    options = WaveCompileOptions(
+        subs={
+            M: shape[0],
+            N: shape[1],
+            BLOCK_M: 1,
+            BLOCK_N: 1,
+            ADDRESS_SPACE: tkl.AddressSpace.GLOBAL_MEMORY.value,
+        },
+        canonicalize=True,
+        compile_to_mlir=True,
+    )
+    options = set_default_compile_config(options)
+    test = wave_compile(options, test)
+    print(test.asm)
+
+    # CHECK-LABEL: test_thread_idx_condition
+    #
+    # CHECK: %[[TID:.+]] = gpu.thread_id  x
+    # CHECK: %[[TID_I32:.+]] = arith.index_cast %[[TID]] : index to i32
+    # CHECK: %[[SPLAT:.+]] = vector.splat %[[TID_I32]] : vector<1xi32>
+    #
+    # CHECK: %[[TID_IDX_V:.+]] = arith.index_cast %[[SPLAT]] : vector<1xi32> to vector<1xindex>
+    # CHECK: %[[CMPI:.+]] = arith.cmpi slt, %[[TID_IDX_V]], %{{.*}}
+    # CHECK: %[[COND:.+]] = vector.extract %[[CMPI]][0] : i1 from vector<1xi1>
+    # CHECK: scf.if %[[COND]] {
+
+
+@run_test
 def test_dynamic_copy():
     constraints: list[tkw.Constraint] = [
         tkw.HardwareConstraint(

@@ -19,8 +19,8 @@ import torch.fx as fx
 
 from ..lang.wave_types import Memory, Register, IndexMapping
 from ..lang.global_symbols import *
-from .._support.indexing import IndexExpr, IndexSymbol, IndexSequence
-from .._support.dtype import DataType, i1
+from .._support.indexing import IndexExpr, IndexSymbol, IndexSequence, index_expr
+from .._support.dtype import DataType, i1, i32
 from .._support.regions import RegionGraph
 from .._support.location import FileLineColInfo
 from .base import OpDispatcher
@@ -51,6 +51,10 @@ def self_index(
     dtype: DataType,
     elements_per_thread: Optional[IndexExpr | int] = None,
 ) -> "Register":
+    ...
+
+
+def thread_idx(dim: IndexExpr, thread_dim: int) -> "Register":
     ...
 
 
@@ -1096,6 +1100,28 @@ class SelfIndex(CustomOp):
     @property
     def type(self) -> "Register":
         return Register[(self.dim, self.dtype)]
+
+
+@define_op("thread_idx")
+@dataclass
+class ThreadIdx(CustomOp):
+    """
+    Creates a register containing thread index.
+
+    The register is indexed by the given dimension for the purposes of shape
+    propagation.
+    """
+
+    dim: IndexExpr
+    thread_dim: int
+
+    @property
+    def indexing_dims(self) -> list[IndexSymbol]:
+        return [self.dim]
+
+    @property
+    def type(self) -> "Register":
+        return Register[(self.dim, i32)]
 
 
 @define_op("shared_memory_barrier")

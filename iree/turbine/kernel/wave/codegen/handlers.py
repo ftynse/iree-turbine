@@ -88,6 +88,7 @@ from ...ops.wave_ops import (
     shuffle,
     tanh,
     tanh_approx,
+    thread_idx,
 )
 from ...compiler.base import CodegenError, ValidationError, NDEBUG
 from ...compiler.builder import IRProxyValue
@@ -192,6 +193,24 @@ def _build_start_indices(
 ###############################################################################
 # Expressions, Dims and Indexing related ops
 ###############################################################################
+
+
+@handle_op(thread_idx)
+def handle_thread_idx(emitter: WaveEmitter, node: fx.Node):
+    try:
+        dim, thread_dim = node.args
+    except ValueError as e:
+        raise ValidationError("Malformed arguments") from e
+
+    index = get_custom(node).index
+    var = index[dim]
+    size = cast_py_literal(emitter, subs_idxc(var.size))
+
+    value = gpu_d.thread_id(gpu_d.Dimension(thread_dim))
+    value = arith_d.index_cast(IrType.parse("i32"), value)
+    vector_type = VectorType.get([size], IrType.parse("i32"))
+    value = vector_d.splat(vector_type, value)
+    emitter.bind_node_proxy(node, IRProxyValue(value))
 
 
 @handle_op(self_index)
